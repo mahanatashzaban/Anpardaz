@@ -1,0 +1,355 @@
+import { useState, useEffect } from 'react'
+
+// Use the VPS IP directly
+const API_BASE = 'http://78.157.51.76'
+
+function App() {
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [screen, setScreen] = useState<'login' | 'otp' | 'home'>('login')
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const savedUser = localStorage.getItem('anpardaz_user')
+    const savedToken = localStorage.getItem('anpardaz_token')
+    if (savedUser && savedToken) {
+      try {
+        setUser(JSON.parse(savedUser))
+        setScreen('home')
+      } catch (e) {
+        localStorage.removeItem('anpardaz_user')
+        localStorage.removeItem('anpardaz_token')
+      }
+    }
+  }, [])
+
+  // Send OTP
+  async function sendOtp() {
+    if (!phone || phone.length !== 11) {
+      setError('شماره همراه را به درستی وارد کنید')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      })
+      const data = await response.json()
+      if (data.sent) {
+        setScreen('otp')
+      } else {
+        setError('ارسال کد تایید با مشکل مواجه شد')
+      }
+    } catch (err) {
+      setError('خطا در ارتباط با سرور')
+      console.error('Error:', err)
+    }
+    setLoading(false)
+  }
+
+  // Verify OTP
+  async function verifyOtp() {
+    if (!code || code.length !== 5) {
+      setError('کد تایید را به درستی وارد کنید')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code })
+      })
+      const data = await response.json()
+      if (data.token && data.user) {
+        localStorage.setItem('anpardaz_token', data.token)
+        localStorage.setItem('anpardaz_user', JSON.stringify(data.user))
+        setUser(data.user)
+        setScreen('home')
+      } else {
+        setError('کد تایید اشتباه است')
+      }
+    } catch (err) {
+      setError('خطا در ارتباط با سرور')
+      console.error('Error:', err)
+    }
+    setLoading(false)
+  }
+
+  // Logout
+  function logout() {
+    localStorage.removeItem('anpardaz_token')
+    localStorage.removeItem('anpardaz_user')
+    setUser(null)
+    setScreen('login')
+  }
+
+  // Login Screen
+  if (screen === 'login') {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        background: '#0f0f0f',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      }}>
+        <div style={{ width: '100%', maxWidth: '400px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <h1 style={{ color: 'white', fontSize: '28px', margin: '0' }}>پرداز</h1>
+            <p style={{ color: '#888', marginTop: '8px' }}>کیف پول دیجیتال</p>
+          </div>
+          
+          <div style={{ 
+            background: '#1a1a1a', 
+            borderRadius: '16px', 
+            padding: '24px'
+          }}>
+            <p style={{ color: '#888', fontSize: '14px', marginBottom: '8px' }}>
+              شماره همراه خود را وارد کنید
+            </p>
+            <input
+              type="tel"
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: '#0f0f0f',
+                border: '1px solid #2e2e2e',
+                borderRadius: '12px',
+                color: 'white',
+                fontSize: '18px',
+                textAlign: 'center',
+                direction: 'ltr'
+              }}
+              placeholder="09xxxxxxxxx"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <p style={{ color: '#888', fontSize: '12px', textAlign: 'center', marginTop: '8px' }}>
+              کد تایید به شماره شما ارسال می‌شود
+            </p>
+            {error && (
+              <p style={{ color: '#ff4444', fontSize: '14px', textAlign: 'center', marginTop: '8px' }}>
+                {error}
+              </p>
+            )}
+            <button
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: '#00c896',
+                color: 'black',
+                border: 'none',
+                borderRadius: '9999px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                marginTop: '16px',
+                cursor: 'pointer',
+                opacity: loading ? 0.5 : 1
+              }}
+              onClick={sendOtp}
+              disabled={loading}
+            >
+              {loading ? 'در حال ارسال...' : 'ادامه'}
+            </button>
+            <p style={{ color: '#888', fontSize: '10px', textAlign: 'center', marginTop: '16px' }}>
+              ورود به معنای پذیرش قوانین و حریم خصوصی آن پرداز است
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // OTP Screen
+  if (screen === 'otp') {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        background: '#0f0f0f',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      }}>
+        <div style={{ width: '100%', maxWidth: '400px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <h1 style={{ color: 'white', fontSize: '24px', margin: '0' }}>کد تایید</h1>
+            <p style={{ color: '#888', marginTop: '8px' }}>
+              کد ۵ رقمی ارسال شده به {phone} را وارد کنید
+            </p>
+          </div>
+          
+          <div style={{ 
+            background: '#1a1a1a', 
+            borderRadius: '16px', 
+            padding: '24px'
+          }}>
+            <input
+              type="text"
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: '#0f0f0f',
+                border: '1px solid #2e2e2e',
+                borderRadius: '12px',
+                color: 'white',
+                fontSize: '24px',
+                textAlign: 'center',
+                letterSpacing: '4px',
+                direction: 'ltr'
+              }}
+              placeholder="_ _ _ _ _"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
+              maxLength={5}
+            />
+            {error && (
+              <p style={{ color: '#ff4444', fontSize: '14px', textAlign: 'center', marginTop: '8px' }}>
+                {error}
+              </p>
+            )}
+            <button
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: '#00c896',
+                color: 'black',
+                border: 'none',
+                borderRadius: '9999px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                marginTop: '16px',
+                cursor: 'pointer',
+                opacity: loading ? 0.5 : 1
+              }}
+              onClick={verifyOtp}
+              disabled={loading}
+            >
+              {loading ? 'در حال تایید...' : 'تایید'}
+            </button>
+            <button
+              style={{
+                width: '100%',
+                background: 'transparent',
+                color: '#888',
+                border: 'none',
+                fontSize: '14px',
+                marginTop: '8px',
+                cursor: 'pointer'
+              }}
+              onClick={() => { setScreen('login'); setError('') }}
+            >
+              بازگشت
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Home Screen
+  if (screen === 'home' && user) {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        background: '#0f0f0f',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      }}>
+        {/* Header */}
+        <div style={{ 
+          background: '#1a1a1a', 
+          padding: '16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h1 style={{ color: 'white', fontSize: '20px', margin: '0' }}>پرداز</h1>
+            <p style={{ color: '#888', fontSize: '12px', margin: '0' }}>
+              {user.kelid_id || 'کیف پول دیجیتال'}
+            </p>
+          </div>
+          <button
+            style={{
+              background: 'transparent',
+              color: '#888',
+              border: 'none',
+              fontSize: '14px',
+              cursor: 'pointer'
+            }}
+            onClick={logout}
+          >
+            خروج
+          </button>
+        </div>
+
+        {/* Balance */}
+        <div style={{ padding: '16px' }}>
+          <div style={{ 
+            background: '#1a1a1a', 
+            borderRadius: '16px', 
+            padding: '16px',
+            marginBottom: '12px'
+          }}>
+            <p style={{ color: '#888', fontSize: '14px', margin: '0' }}>موجودی ریالی</p>
+            <p style={{ color: 'white', fontSize: '28px', fontWeight: 'bold', margin: '4px 0 0 0' }}>
+              ۰ ریال
+            </p>
+          </div>
+          <div style={{ 
+            background: '#1a1a1a', 
+            borderRadius: '16px', 
+            padding: '16px'
+          }}>
+            <p style={{ color: '#888', fontSize: '14px', margin: '0' }}>موجودی تتر (TRC20)</p>
+            <p style={{ color: 'white', fontSize: '28px', fontWeight: 'bold', margin: '4px 0 0 0' }}>
+              ۰ USDT
+            </p>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div style={{ 
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '8px',
+          padding: '16px'
+        }}>
+          {['انتقال وجه', 'واریز', 'شارژ', 'بسته اینترنت', 'خدمات خودرو', 'خدمات قضایی'].map((label) => (
+            <button
+              key={label}
+              style={{
+                background: '#1a1a1a',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '12px',
+                color: 'white',
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
+export default App

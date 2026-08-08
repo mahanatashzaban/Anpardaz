@@ -3,7 +3,7 @@ import logoMark from './imports/25087b17-7744-4c8c-b6b5-85499fc1d7bc.jpg'
 import logoFull from './imports/e21fe6df-2b0a-4abc-b6a7-19037cb32140.jpg'
 
 // ─── API ──────────────────────────────────────────────────────────────────────
-const API_BASE = 'http://192.168.1.150:3000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://78.157.51.76/api'
 const APP_NAME = 'آن پرداز'
 
 async function apiCall(path: string, opts: RequestInit = {}) {
@@ -197,6 +197,22 @@ function BottomNav({ active, onNav, theme }: { active: Screen; onNav: (s: Screen
 // ─── Splash ───────────────────────────────────────────────────────────────────
 function SplashScreen({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState(0)
+
+  // ─── CHECK SAVED LOGIN ON REFRESH ──────────────────────────────────────────
+  useEffect(() => {
+    const savedUser = localStorage.getItem('anpardaz_user')
+    const savedToken = localStorage.getItem('anpardaz_token')
+    
+    if (savedUser && savedToken) {
+      try {
+        setUser(JSON.parse(savedUser))
+        setScreen('home')
+      } catch (e) {
+        localStorage.removeItem('anpardaz_user')
+        localStorage.removeItem('anpardaz_token')
+      }
+    }
+  }, [])
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 200)
     const t2 = setTimeout(() => setPhase(2), 900)

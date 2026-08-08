@@ -4,9 +4,15 @@ import { db } from '../db'
 
 const router = Router()
 
-// Generate a random N-digit numeric code
+// Generate a random N-digit numeric code (secure)
 function randomCode(digits = 5): string {
-  return Array.from({ length: digits }, () => Math.floor(Math.random() * 10)).join('')
+  const crypto = require('crypto')
+  let code = ''
+  for (let i = 0; i < digits; i++) {
+    const randomDigit = crypto.randomInt(0, 10)
+    code += randomDigit.toString()
+  }
+  return code
 }
 
 // Send OTP via Kavenegar Verify Lookup API
@@ -16,14 +22,16 @@ async function sendSms(phone: string, code: string) {
     console.log(`[DEV] OTP for ${phone}: ${code}`)
     return
   }
-  const template = process.env.KAVENEGAR_TEMPLATE || 'anpardaz-otp'
+  const template = process.env.KAVENEGAR_TEMPLATE || 'template'
   try {
     const url = `https://api.kavenegar.com/v1/${apiKey}/verify/lookup.json`
     const body = new URLSearchParams({ receptor: phone, token: code, template })
     const res = await fetch(url, { method: 'POST', body })
-    const json = await res.json() as { return?: { status: number; message: string } }
+    const json: any = await res.json()
     if (json.return?.status !== 200) {
       console.error('[Kavenegar] Error:', json.return?.message)
+    } else {
+      console.log('[Kavenegar] SMS sent successfully to:', phone)
     }
   } catch (err) {
     console.error('[Kavenegar] Request failed:', err)
@@ -39,7 +47,7 @@ router.post('/send-otp', async (req: Request, res: Response) => {
   }
 
   const code = randomCode(5)
-  const expiresAt = new Date(Date.now() + 2 * 60 * 1000) // 2 minutes
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
 
   await db.query(
     `INSERT INTO otp_codes (phone, code, expires_at) VALUES ($1, $2, $3)`,
@@ -50,7 +58,7 @@ router.post('/send-otp', async (req: Request, res: Response) => {
   res.json({ sent: true })
 })
 
-// POST /api/auth/verify-otp
+// POST /api/auth/verify-otp - NO BYPASS CODE
 router.post('/verify-otp', async (req: Request, res: Response) => {
   const { phone, code } = req.body as { phone?: string; code?: string }
   if (!phone || !code) {
@@ -58,23 +66,20 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
     return
   }
 
-  // In development, accept '12345' as a bypass code
-  const isDev = process.env.NODE_ENV !== 'production'
-  const isBypass = isDev && code === '12345'
-
-  if (!isBypass) {
-    const result = await db.query(
-      `SELECT id FROM otp_codes
-       WHERE phone = $1 AND code = $2 AND used = false AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
-      [phone, code]
-    )
-    if (result.rowCount === 0) {
-      res.status(401).json({ error: 'invalid_code' })
-      return
-    }
-    await db.query(`UPDATE otp_codes SET used = true WHERE id = $1`, [result.rows[0].id])
+  // NO BYPASS CODE - Production security
+  const result = await db.query(
+    `SELECT id FROM otp_codes
+     WHERE phone = $1 AND code = $2 AND used = false AND expires_at > NOW()
+     ORDER BY created_at DESC LIMIT 1`,
+    [phone, code]
+  )
+  
+  if (result.rowCount === 0) {
+    res.status(401).json({ error: 'invalid_code' })
+    return
   }
+  
+  await db.query(`UPDATE otp_codes SET used = true WHERE id = $1`, [result.rows[0].id])
 
   // Upsert user
   const upsert = await db.query(
